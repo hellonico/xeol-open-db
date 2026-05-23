@@ -108,12 +108,21 @@ func main() {
 	tarName := fmt.Sprintf("xeol-db_v1_%s.tar.gz", archiveTime)
 
 	fmt.Printf("Archiving %s to %s...\n", dbPath, tarName)
-	cmd := exec.Command("tar", "-czf", tarName, dbPath)
+	// Create metadata.json
+	metadata := map[string]interface{}{
+		"built":    now.Format(time.RFC3339),
+		"version":  1,
+		"checksum": "", // Xeol client doesn't strictly validate this inside metadata.json
+	}
+	bMeta, _ := json.MarshalIndent(metadata, "", "  ")
+	os.WriteFile("metadata.json", bMeta, 0644)
+
+	cmd := exec.Command("tar", "-czf", tarName, dbPath, "metadata.json")
 	if err := cmd.Run(); err != nil {
 		log.Fatalf("failed to tar database: %v", err)
 	}
 
-	// 5. Calculate SHA256
+	// 5. Calculate SHA256 of the tarball
 	f, err := os.Open(tarName)
 	if err != nil {
 		log.Fatalf("failed to open tar: %v", err)
@@ -131,7 +140,7 @@ func main() {
 			"1": []map[string]interface{}{
 				{
 					"version":  1,
-					"built":    timestamp,
+					"built":    now.Format(time.RFC3339),
 					"url":      "https://hellonico.github.io/xeol-open-db/" + tarName,
 					"checksum": checksum,
 				},
