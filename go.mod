@@ -4,7 +4,6 @@ go 1.26.1
 
 require (
 	github.com/glebarez/sqlite v1.9.0
-	github.com/xeol-io/xeol v0.0.9
 	gorm.io/gorm v1.25.6
 )
 
@@ -23,5 +22,3 @@ require (
 	modernc.org/memory v1.8.0 // indirect
 	modernc.org/sqlite v1.31.1 // indirect
 )
-
-replace github.com/xeol-io/xeol => github.com/hellonico/xeol feature/terraform-support
