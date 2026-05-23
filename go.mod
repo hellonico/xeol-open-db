@@ -24,4 +24,4 @@ require (
 	modernc.org/sqlite v1.31.1 // indirect
 )
 
-replace github.com/xeol-io/xeol => ../xeol
+replace github.com/xeol-io/xeol => github.com/hellonico/xeol feature/terraform-support

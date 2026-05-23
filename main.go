@@ -12,10 +12,45 @@ import (
 	"time"
 
 	"github.com/glebarez/sqlite"
-	v1 "github.com/xeol-io/xeol/xeol/db/v1"
-	"github.com/xeol-io/xeol/xeol/db/v1/store/model"
 	"gorm.io/gorm"
 )
+
+const SchemaVersion = 1
+
+type IDModel struct {
+	BuildTimestamp string `gorm:"column:build_timestamp"`
+	SchemaVersion  int    `gorm:"column:schema_version"`
+}
+func (IDModel) TableName() string { return "id" }
+
+type ProductModel struct {
+	ID        int    `gorm:"primary_key;column:id;"`
+	Name      string `gorm:"column:name"`
+	Permalink string `gorm:"column:permalink"`
+}
+func (ProductModel) TableName() string { return "products" }
+
+type CycleModel struct {
+	ProductName       string    `gorm:"column:product_name"`
+	ProductPermalink  string    `gorm:"column:product_permalink"`
+	ID                int       `gorm:"primary_key;column:id;"`
+	ProductID         int       `gorm:"column:product_id"`
+	ReleaseCycle      string    `gorm:"column:release_cycle"`
+	Eol               time.Time `gorm:"column:eol"`
+	EolBool           bool      `gorm:"column:eol_bool"`
+	LTS               string    `gorm:"column:lts"`
+	LatestRelease     string    `gorm:"column:latest_release"`
+	LatestReleaseDate time.Time `gorm:"column:latest_release_date"`
+	ReleaseDate       time.Time `gorm:"column:release_date"`
+}
+func (CycleModel) TableName() string { return "cycles" }
+
+type PurlModel struct {
+	ID        int    `gorm:"primary_key;column:id;"`
+	ProductID int    `gorm:"column:product_id"`
+	Purl      string `gorm:"column:purl"`
+}
+func (PurlModel) TableName() string { return "purls" }
 
 type EOLResponse struct {
 	Cycle             string      `json:"cycle"`
@@ -26,15 +61,6 @@ type EOLResponse struct {
 	Lts               interface{} `json:"lts"`
 }
 
-// PurlModel matches the DB schema used by the xeol store.
-type PurlModel struct {
-	ID        int    `gorm:"primary_key;column:id;"`
-	ProductID int    `gorm:"column:product_id"`
-	Purl      string `gorm:"column:purl"`
-}
-
-func (m PurlModel) TableName() string { return "purls" }
-
 func main() {
 	dbPath := "xeol.db"
 	_ = os.Remove(dbPath)
@@ -43,13 +69,13 @@ func main() {
 		log.Fatalf("failed to open database: %v", err)
 	}
 
-	if err := db.AutoMigrate(&model.IDModel{}, &model.ProductModel{}, &PurlModel{}, &model.CycleModel{}); err != nil {
+	if err := db.AutoMigrate(&IDModel{}, &ProductModel{}, &PurlModel{}, &CycleModel{}); err != nil {
 		log.Fatalf("failed to migrate: %v", err)
 	}
 
 	// 1. Insert DB metadata
-	db.Create(&model.IDModel{
-		SchemaVersion:  v1.SchemaVersion,
+	db.Create(&IDModel{
+		SchemaVersion:  SchemaVersion,
 		BuildTimestamp: time.Now().UTC().Format(time.RFC3339Nano),
 	})
 
@@ -62,8 +88,6 @@ func main() {
 	})
 
 	// 3. Seed hashicorp/aws provider with known EOL cycles.
-	//    The AWS provider follows a major-version deprecation model; v4.x and below
-	//    are EOL as of 2024-01-31 (announced by HashiCorp).
 	seedProviderWithStaticCycles(db, productSpec{
 		Name:      "Terraform AWS Provider",
 		Permalink: "terraform-provider-aws",
@@ -100,7 +124,6 @@ func main() {
 	checksum := fmt.Sprintf("sha256:%x", h.Sum(nil))
 
 	// 6. Generate listing.json
-	// This format is identical to what Xeol fetches from data.xeol.io
 	listing := map[string]interface{}{
 		"available": map[string]interface{}{
 			"1": []map[string]interface{}{
@@ -136,7 +159,7 @@ type staticCycle struct {
 }
 
 func seedProduct(db *gorm.DB, spec productSpec) {
-	product := model.ProductModel{Name: spec.Name, Permalink: spec.Permalink}
+	product := ProductModel{Name: spec.Name, Permalink: spec.Permalink}
 	db.Create(&product)
 	db.Create(&PurlModel{ProductID: product.ID, Purl: spec.Purl})
 
@@ -152,7 +175,7 @@ func seedProduct(db *gorm.DB, spec productSpec) {
 	}
 
 	for _, item := range data {
-		cycle := model.CycleModel{
+		cycle := CycleModel{
 			ProductID:        product.ID,
 			ProductName:      product.Name,
 			ProductPermalink: product.Permalink,
@@ -178,12 +201,12 @@ func seedProduct(db *gorm.DB, spec productSpec) {
 }
 
 func seedProviderWithStaticCycles(db *gorm.DB, spec productSpec, cycles []staticCycle) {
-	product := model.ProductModel{Name: spec.Name, Permalink: spec.Permalink}
+	product := ProductModel{Name: spec.Name, Permalink: spec.Permalink}
 	db.Create(&product)
 	db.Create(&PurlModel{ProductID: product.ID, Purl: spec.Purl})
 
 	for _, c := range cycles {
-		cycle := model.CycleModel{
+		cycle := CycleModel{
 			ProductID:        product.ID,
 			ProductName:      product.Name,
 			ProductPermalink: product.Permalink,
