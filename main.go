@@ -102,7 +102,6 @@ func main() {
 
 	// 4. Archive into tar.gz
 	now := time.Now().UTC()
-	timestamp := now.Format(time.RFC3339Nano)
 	// tar treats colons as remote hosts, so we format the filename without colons
 	archiveTime := now.Format("2006-01-02_150405")
 	tarName := fmt.Sprintf("xeol-db_v1_%s.tar.gz", archiveTime)
