@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/glebarez/sqlite"
+	"gopkg.in/yaml.v3"
 	"gorm.io/gorm"
 )
 
@@ -126,18 +127,25 @@ func main() {
 		APIURL:    "https://endoflife.date/api/terraform.json",
 	})
 
-	// 3. Seed hashicorp/aws provider with known EOL cycles.
-	seedProviderWithStaticCycles(db, productSpec{
-		Name:      "Terraform AWS Provider",
-		Permalink: "terraform-provider-aws",
-		Purl:      "pkg:terraform/hashicorp/aws",
-	}, []staticCycle{
-		{Cycle: "4", EolDate: "2024-01-31", Latest: "4.67.0"},
-		{Cycle: "3", EolDate: "2023-04-30", Latest: "3.76.1"},
-		{Cycle: "2", EolDate: "2022-09-30", Latest: "2.70.0"},
-	})
+	// 3. Seed custom rules from YAML file
+	yamlFile, err := os.ReadFile("custom-rules.yaml")
+	if err == nil {
+		var customProviders []CustomProvider
+		if err := yaml.Unmarshal(yamlFile, &customProviders); err != nil {
+			log.Fatalf("failed to parse custom-rules.yaml: %v", err)
+		}
+		for _, cp := range customProviders {
+			seedProviderWithStaticCycles(db, productSpec{
+				Name:      cp.Name,
+				Permalink: cp.Permalink,
+				Purl:      cp.Purl,
+			}, cp.Cycles)
+		}
+	} else {
+		fmt.Println("No custom-rules.yaml found, skipping custom rule injection.")
+	}
 
-	fmt.Println("✅ xeol.db generated successfully with Terraform binary + provider EOL data!")
+	fmt.Println("✅ xeol.db generated successfully with Terraform binary + custom YAML EOL data!")
 
 	// 4. Archive into tar.gz
 	now := time.Now().UTC()
@@ -202,9 +210,16 @@ type productSpec struct {
 }
 
 type staticCycle struct {
-	Cycle   string
-	EolDate string
-	Latest  string
+	Cycle   string `yaml:"cycle"`
+	EolDate string `yaml:"eolDate"`
+	Latest  string `yaml:"latest"`
+}
+
+type CustomProvider struct {
+	Name      string        `yaml:"name"`
+	Permalink string        `yaml:"permalink"`
+	Purl      string        `yaml:"purl"`
+	Cycles    []staticCycle `yaml:"cycles"`
 }
 
 func seedProduct(db *gorm.DB, spec productSpec) {

@@ -1,0 +1,22 @@
+- name: "Terraform AWS Provider"
+  permalink: "terraform-provider-aws"
+  purl: "pkg:terraform/hashicorp/aws"
+  cycles:
+    - cycle: "4"
+      eolDate: "2024-01-31"
+      latest: "4.67.0"
+    - cycle: "3"
+      eolDate: "2023-04-30"
+      latest: "3.76.1"
+    - cycle: "2"
+      eolDate: "2022-09-30"
+      latest: "2.70.0"
+
+# Example of how you would add an internal module:
+# - name: "Cube Internal Auth Module"
+#   permalink: "cube-internal-auth"
+#   purl: "pkg:npm/cube-internal-auth"
+#   cycles:
+#     - cycle: "1.0"
+#       eolDate: "2024-01-01"
+#       latest: "1.5.0"
