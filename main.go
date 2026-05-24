@@ -64,20 +64,59 @@ type EOLResponse struct {
 func main() {
 	dbPath := "xeol.db"
 	_ = os.Remove(dbPath)
+
+	fmt.Println("Downloading upstream listing.json...")
+	resp, err := http.Get("https://data.xeol.io/xeol/databases/listing.json")
+	if err != nil {
+		log.Fatalf("failed to fetch listing: %v", err)
+	}
+	defer resp.Body.Close()
+
+	var listing struct {
+		Available map[string][]struct {
+			URL   string `json:"url"`
+			Built string `json:"built"`
+		} `json:"available"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&listing); err != nil {
+		log.Fatalf("failed to parse listing: %v", err)
+	}
+
+	if len(listing.Available["1"]) == 0 {
+		log.Fatalf("no available upstream DB found in listing")
+	}
+
+	var upstreamURL string
+	var maxBuilt time.Time
+	for _, item := range listing.Available["1"] {
+		t, err := time.Parse(time.RFC3339Nano, item.Built)
+		if err == nil && t.After(maxBuilt) {
+			maxBuilt = t
+			upstreamURL = item.URL
+		}
+	}
+
+	fmt.Printf("Downloading upstream DB from %s...\n", upstreamURL)
+
+	// Use curl to download and tar to unpack (it outputs xeol.db and metadata.json)
+	// Some are tar.xz, some are tar.gz, tar -xf auto-detects.
+	cmd := exec.Command("sh", "-c", fmt.Sprintf("curl -s -L %s | tar -xf -", upstreamURL))
+	if err := cmd.Run(); err != nil {
+		log.Fatalf("failed to download and unpack upstream DB: %v", err)
+	}
+
+	fmt.Println("Successfully extracted upstream xeol.db. Injecting custom rules...")
+
 	db, err := gorm.Open(sqlite.Open(dbPath), &gorm.Config{})
 	if err != nil {
 		log.Fatalf("failed to open database: %v", err)
 	}
 
-	if err := db.AutoMigrate(&IDModel{}, &ProductModel{}, &PurlModel{}, &CycleModel{}); err != nil {
-		log.Fatalf("failed to migrate: %v", err)
-	}
+	db.Exec("ALTER TABLE cycles ADD COLUMN product_name text")
+	db.Exec("ALTER TABLE cycles ADD COLUMN product_permalink text")
 
-	// 1. Insert DB metadata
-	db.Create(&IDModel{
-		SchemaVersion:  SchemaVersion,
-		BuildTimestamp: time.Now().UTC().Format(time.RFC3339Nano),
-	})
+	// Update the build timestamp so xeol clients download it as an update
+	db.Exec("UPDATE id SET build_timestamp = ?", time.Now().UTC().Format(time.RFC3339Nano))
 
 	// 2. Seed the Terraform BINARY lifecycle (from endoflife.date)
 	seedProduct(db, productSpec{
@@ -116,7 +155,7 @@ func main() {
 	bMeta, _ := json.MarshalIndent(metadata, "", "  ")
 	os.WriteFile("metadata.json", bMeta, 0644)
 
-	cmd := exec.Command("tar", "-czf", tarName, dbPath, "metadata.json")
+	cmd = exec.Command("tar", "-czf", tarName, dbPath, "metadata.json")
 	if err := cmd.Run(); err != nil {
 		log.Fatalf("failed to tar database: %v", err)
 	}
@@ -134,7 +173,7 @@ func main() {
 	checksum := fmt.Sprintf("sha256:%x", h.Sum(nil))
 
 	// 6. Generate listing.json
-	listing := map[string]interface{}{
+	newListing := map[string]interface{}{
 		"available": map[string]interface{}{
 			"1": []map[string]interface{}{
 				{
@@ -147,7 +186,7 @@ func main() {
 		},
 	}
 
-	b, _ := json.MarshalIndent(listing, "", "  ")
+	b, _ := json.MarshalIndent(newListing, "", "  ")
 	if err := os.WriteFile("listing.json", b, 0644); err != nil {
 		log.Fatalf("failed to write listing.json: %v", err)
 	}
