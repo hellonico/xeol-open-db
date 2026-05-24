@@ -98,9 +98,9 @@ func main() {
 
 	fmt.Printf("Downloading upstream DB from %s...\n", upstreamURL)
 
-	// Use curl to download and tar to unpack (it outputs xeol.db and metadata.json)
-	// Some are tar.xz, some are tar.gz, tar -xf auto-detects.
-	cmd := exec.Command("sh", "-c", fmt.Sprintf("curl -s -L %s | tar -xf -", upstreamURL))
+	// Use curl to download to a file, then unpack (it outputs xeol.db and metadata.json).
+	// We save to a file first because piping compressed archives to tar can fail on some Linux distributions (like GitHub Actions runners).
+	cmd := exec.Command("sh", "-c", fmt.Sprintf("curl -s -L -o temp_upstream_db.tar %s && tar -xf temp_upstream_db.tar && rm temp_upstream_db.tar", upstreamURL))
 	if err := cmd.Run(); err != nil {
 		log.Fatalf("failed to download and unpack upstream DB: %v", err)
 	}
